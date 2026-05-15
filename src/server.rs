@@ -4,7 +4,7 @@ use std::{
     str::FromStr,
 };
 
-use crate::http::{self, HttpRequest, HttpVerb};
+use crate::http::{self, HttpRequest, HttpResponse, HttpStatusCode, HttpVerb};
 
 pub(crate) struct Server {
     host: String,
@@ -48,8 +48,8 @@ impl Server {
 fn handle_request(request: &[u8]) -> String {
     match http::parse(request) {
         Some(request) => match request.path().as_str() {
-            "/" => "HTTP/1.1 200 OK\r\n\r\n".to_string(),
-            _ => "HTTP/1.1 404 Not Found\r\n\r\n".to_string(),
+            "/" => HttpResponse::with(HttpStatusCode::Ok).to_string(),
+            _ => HttpResponse::with(HttpStatusCode::NotFound).to_string(),
         },
         None => "unknown path".to_string(),
     }

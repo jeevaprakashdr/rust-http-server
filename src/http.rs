@@ -1,4 +1,8 @@
-use std::str::FromStr;
+use std::{
+    clone,
+    fmt::{Display, write},
+    str::FromStr,
+};
 
 #[derive(Debug)]
 pub(crate) enum HttpVerb {
@@ -40,8 +44,50 @@ impl HttpRequest {
     }
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum HttpStatusCode {
+    Ok,
+    NotFound,
+}
+
+impl From<HttpStatusCode> for u16 {
+    fn from(value: HttpStatusCode) -> Self {
+        match value {
+            HttpStatusCode::Ok => 200,
+            HttpStatusCode::NotFound => 404,
+        }
+    }
+}
+
+impl Display for HttpStatusCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            HttpStatusCode::Ok => "OK",
+            HttpStatusCode::NotFound => "NOT FOUND",
+        };
+
+        write!(f, "{}", value)
+    }
+}
+
 pub(crate) struct HttpResponse {
-    
+    status_code: HttpStatusCode,
+}
+
+impl Display for HttpResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let crlf = "\r\n";
+        let version = "HTTP/1.1";
+        let status_code: u16 = self.status_code.into();
+        let status_code_str = self.status_code.to_string();
+        write!(f, "{version} {status_code} {status_code_str}{crlf}{crlf}")
+    }
+}
+
+impl HttpResponse {
+    pub(crate) fn with(status_code: HttpStatusCode) -> HttpResponse {
+        Self { status_code }
+    }
 }
 
 pub(crate) fn parse(request: &[u8]) -> Option<HttpRequest> {
