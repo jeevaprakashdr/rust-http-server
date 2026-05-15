@@ -1,10 +1,9 @@
 use std::{
-    io::{self, BufReader, BufWriter, Read, Write},
-    net::{TcpListener, TcpStream},
-    str::FromStr,
+    io::{self, },
+    net::TcpListener,
 };
 
-use crate::http::{self, HttpRequest, HttpResponse, HttpStatusCode, HttpVerb};
+use crate::{http::{self, HttpResponse, HttpResponseHeader, HttpStatusCode}, tcp::TcpStreamWrapper};
 
 pub(crate) struct Server {
     host: String,
@@ -47,45 +46,17 @@ impl Server {
 
 fn handle_request(request: &[u8]) -> String {
     match http::parse(request) {
-        Some(request) => match request.path().as_str() {
-            "/" => HttpResponse::with(HttpStatusCode::Ok).to_string(),
-            _ => HttpResponse::with(HttpStatusCode::NotFound).to_string(),
+        Some(request) => match request.path().as_slice() {
+            [] => HttpResponse::with_status(HttpStatusCode::Ok).to_string(),
+            [b"echo", sub_path] => {
+                HttpResponse::with_status(HttpStatusCode::Ok)
+                    .with_header(HttpResponseHeader::ContentType.into(), "text/plain".to_string())
+                    .with_header(HttpResponseHeader::ContentLength.into(), sub_path.len().to_string())
+                    .with_body(sub_path)
+                    .to_string()
+            }
+            _ => HttpResponse::with_status(HttpStatusCode::NotFound).to_string(),
         },
         None => "unknown path".to_string(),
-    }
-}
-
-struct TcpStreamWrapper<'a> {
-    reader: BufReader<&'a TcpStream>,
-    writer: BufWriter<&'a TcpStream>,
-}
-
-impl<'a> TcpStreamWrapper<'a> {
-    fn new(stream: &'a TcpStream) -> Self {
-        Self {
-            reader: BufReader::new(&stream),
-            writer: BufWriter::new(&stream),
-        }
-    }
-
-    fn read(&mut self) -> io::Result<Vec<u8>> {
-        let mut buffer = [0; 512];
-
-        let bytes_count = self
-            .reader
-            .read(&mut buffer[..])
-            .inspect_err(|e| eprintln!("Failed to read from stream. {}", e))
-            .unwrap();
-
-        println!(
-            "read content original: {:?}",
-            str::from_utf8(&buffer[..bytes_count]).unwrap()
-        );
-
-        Ok(buffer[..bytes_count].to_vec())
-    }
-
-    fn write(&mut self, content: String) -> io::Result<()> {
-        self.writer.write_all(content.as_bytes())
     }
 }
