@@ -1,7 +1,10 @@
 use std::{
     io::{self, BufReader, BufWriter, Read, Write},
-    net::{TcpListener, TcpStream}, str::FromStr,
+    net::{TcpListener, TcpStream},
+    str::FromStr,
 };
+
+use crate::http::{self, HttpRequest, HttpVerb};
 
 pub(crate) struct Server {
     host: String,
@@ -43,10 +46,12 @@ impl Server {
 }
 
 fn handle_request(request: &[u8]) -> String {
-    let parts: Vec<&[u8]> = request.split(|&c| c == b' ').collect();
-    match parts[1] {
-        b"/" => "HTTP/1.1 200 OK\r\n\r\n".to_string(),
-       _ => "HTTP/1.1 404 Not Found\r\n\r\n".to_string()
+    match http::parse(request) {
+        Some(request) => match request.path().as_str() {
+            "/" => "HTTP/1.1 200 OK\r\n\r\n".to_string(),
+            _ => "HTTP/1.1 404 Not Found\r\n\r\n".to_string(),
+        },
+        None => "unknown path".to_string(),
     }
 }
 
@@ -83,12 +88,4 @@ impl<'a> TcpStreamWrapper<'a> {
     fn write(&mut self, content: String) -> io::Result<()> {
         self.writer.write_all(content.as_bytes())
     }
-}
-
-enum HttpResponseParts {
-    Version(String),
-    StatusCode(i16),
-    ReasonPhrase(String),
-    EOL(String),
-    EmptyHeader(String)
 }
