@@ -63,7 +63,7 @@ impl Display for HttpStatusCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let value = match self {
             HttpStatusCode::Ok => "OK",
-            HttpStatusCode::NotFound => "NOT FOUND",
+            HttpStatusCode::NotFound => "Not Found",
         };
 
         write!(f, "{}", value)
