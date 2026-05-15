@@ -1,4 +1,7 @@
-use std::{io::{self, BufReader, BufWriter, Read, Write}, net::{TcpListener, TcpStream}};
+use std::{
+    io::{self, BufReader, BufWriter, Read, Write},
+    net::{TcpListener, TcpStream}, str::FromStr,
+};
 
 pub(crate) struct Server {
     host: String,
@@ -22,12 +25,11 @@ impl Server {
                 Ok(stream) => {
                     println!("Accepted new connection");
                     let mut streamer = TcpStreamWrapper::new(&stream);
-                    let content = streamer.read().unwrap();
-                    if content.contains(&"GET") {
-                        streamer.write("HTTP/1.1 200 OK\r\n\r\n".to_string()).unwrap()
-                    }
+                    let request = streamer.read().unwrap();
+                    let response = handle_request(&request);
+                    streamer.write(response).unwrap();
                 }
-                Err(e) => eprintln!("error: {}", e)
+                Err(e) => eprintln!("error: {}", e),
             }
         }
     }
@@ -37,6 +39,14 @@ impl Server {
         listener
             .inspect_err(|e| eprintln!("Failed to bind TCPListener. {}", e))
             .inspect(|l| println!("listening on {:?}", l))
+    }
+}
+
+fn handle_request(request: &[u8]) -> String {
+    let parts: Vec<&[u8]> = request.split(|&c| c == b' ').collect();
+    match parts[1] {
+        b"/" => "HTTP/1.1 200 OK\r\n\r\n".to_string(),
+       _ => "HTTP/1.1 404 Not Found\r\n\r\n".to_string()
     }
 }
 
@@ -53,7 +63,7 @@ impl<'a> TcpStreamWrapper<'a> {
         }
     }
 
-    fn read(&mut self) -> io::Result<String> {
+    fn read(&mut self) -> io::Result<Vec<u8>> {
         let mut buffer = [0; 512];
 
         let bytes_count = self
@@ -62,14 +72,23 @@ impl<'a> TcpStreamWrapper<'a> {
             .inspect_err(|e| eprintln!("Failed to read from stream. {}", e))
             .unwrap();
 
-        let str = str::from_utf8(&buffer[..bytes_count])
-            .inspect(|x| println!("read content original: {x}"))
-            .unwrap();
+        println!(
+            "read content original: {:?}",
+            str::from_utf8(&buffer[..bytes_count]).unwrap()
+        );
 
-        Ok(str.to_string())
+        Ok(buffer[..bytes_count].to_vec())
     }
 
     fn write(&mut self, content: String) -> io::Result<()> {
         self.writer.write_all(content.as_bytes())
     }
+}
+
+enum HttpResponseParts {
+    Version(String),
+    StatusCode(i16),
+    ReasonPhrase(String),
+    EOL(String),
+    EmptyHeader(String)
 }
