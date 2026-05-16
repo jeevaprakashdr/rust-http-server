@@ -1,6 +1,4 @@
-use std::{
-    collections::HashMap, fmt::Display, str::FromStr
-};
+use std::{collections::HashMap, fmt::Display, str::FromStr};
 
 #[derive(Debug)]
 pub(crate) enum HttpVerb {
@@ -26,19 +24,30 @@ pub(crate) struct HttpRequest<'a> {
     method: HttpVerb,
     path: Vec<&'a [u8]>,
     version: String,
+    headers: HashMap<&'a [u8], &'a [u8]>,
 }
 
 impl<'a> HttpRequest<'a> {
-    pub(crate) fn new(method: HttpVerb, path: Vec<&'a [u8]>, version: String) -> Self {
+    pub(crate) fn new(
+        method: HttpVerb,
+        path: Vec<&'a [u8]>,
+        version: String,
+        headers: HashMap<&'a [u8], &'a [u8]>,
+    ) -> Self {
         Self {
             method,
             path,
             version,
+            headers,
         }
     }
 
-    pub(crate) fn path(&self) -> Vec<&[u8]> {
+    pub(crate) fn get_path(&self) -> Vec<&[u8]> {
         self.path.clone()
+    }
+
+    pub(crate) fn get_headers(&self) -> HashMap<&'a [u8], &'a [u8]> {
+        self.headers.clone()
     }
 }
 
@@ -68,16 +77,28 @@ impl Display for HttpStatusCode {
     }
 }
 
-pub(crate) enum HttpResponseHeader {
+pub(crate) enum HttpHeader {
     ContentType,
     ContentLength,
+    UserAgent,
 }
 
-impl From<HttpResponseHeader> for String {
-    fn from(value: HttpResponseHeader) -> Self {
+impl From<HttpHeader> for String {
+    fn from(value: HttpHeader) -> Self {
         match value {
-            HttpResponseHeader::ContentType => "Content-Type".to_string(),
-            HttpResponseHeader::ContentLength => "Content-Length".to_string(),
+            HttpHeader::ContentType => "Content-Type".to_string(),
+            HttpHeader::ContentLength => "Content-Length".to_string(),
+            HttpHeader::UserAgent => "User-Agent".to_string(),
+        }
+    }
+}
+
+impl From<HttpHeader> for &[u8] {
+    fn from(value: HttpHeader) -> Self {
+        match value {
+            HttpHeader::ContentType => "Content-Type".as_bytes(),
+            HttpHeader::ContentLength => "Content-Length".as_bytes(),
+            HttpHeader::UserAgent => "User-Agent".as_bytes(),
         }
     }
 }
@@ -147,8 +168,20 @@ pub(crate) fn parse<'a>(request: &'a [u8]) -> Option<HttpRequest<'a>> {
         .split(|&p| p == b'/')
         .filter(|p| !p.is_empty())
         .collect::<Vec<_>>();
-
     let version = str::from_utf8(request_line[2]).ok()?;
 
-    Some(HttpRequest::new(method, path, version.to_string()))
+    let mut headers = HashMap::<&'a [u8], &'a [u8]>::new();
+    for header_line in request_parts {
+        let kv = header_line.split(|&p| p == b':').collect::<Vec<_>>();
+
+        if kv.is_empty() {
+            continue;
+        }
+
+        let key = kv.first().unwrap();
+        let value = kv.last().unwrap();
+        headers.insert(key, value);
+    }
+
+    Some(HttpRequest::new(method, path, version.to_string(), headers))
 }

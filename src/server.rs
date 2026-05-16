@@ -1,9 +1,12 @@
 use std::{
-    io::{self, },
+    io::{self},
     net::TcpListener,
 };
 
-use crate::{http::{self, HttpResponse, HttpResponseHeader, HttpStatusCode}, tcp::TcpStreamWrapper};
+use crate::{
+    http::{self, HttpHeader, HttpResponse, HttpStatusCode},
+    tcp::TcpStreamWrapper,
+};
 
 pub(crate) struct Server {
     host: String,
@@ -46,13 +49,27 @@ impl Server {
 
 fn handle_request(request: &[u8]) -> String {
     match http::parse(request) {
-        Some(request) => match request.path().as_slice() {
+        Some(request) => match request.get_path().as_slice() {
             [] => HttpResponse::with_status(HttpStatusCode::Ok).to_string(),
-            [b"echo", sub_path] => {
+            [b"echo", sub_path] => HttpResponse::with_status(HttpStatusCode::Ok)
+                .with_header(HttpHeader::ContentType.into(), "text/plain".to_string())
+                .with_header(HttpHeader::ContentLength.into(), sub_path.len().to_string())
+                .with_body(sub_path)
+                .to_string(),
+            [b"user-agent"] => {
+                let headers = request.get_headers();
+                let user_agent = headers
+                    .get::<&[u8]>(&HttpHeader::UserAgent.into())
+                    .unwrap()
+                    .trim_ascii();
+
                 HttpResponse::with_status(HttpStatusCode::Ok)
-                    .with_header(HttpResponseHeader::ContentType.into(), "text/plain".to_string())
-                    .with_header(HttpResponseHeader::ContentLength.into(), sub_path.len().to_string())
-                    .with_body(sub_path)
+                    .with_header(HttpHeader::ContentType.into(), "text/plain".to_string())
+                    .with_header(
+                        HttpHeader::ContentLength.into(),
+                        user_agent.len().to_string(),
+                    )
+                    .with_body(user_agent)
                     .to_string()
             }
             _ => HttpResponse::with_status(HttpStatusCode::NotFound).to_string(),
