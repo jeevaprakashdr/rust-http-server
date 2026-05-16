@@ -1,12 +1,22 @@
 use std::{
-    io::{self},
-    net::TcpListener, thread,
+    fs::File,
+    io::{self, Read},
+    net::TcpListener,
+    str, thread,
 };
+
+use clap::Parser;
 
 use crate::{
     http::{self, HttpHeader, HttpResponse, HttpStatusCode},
     tcp::TcpStreamWrapper,
 };
+
+#[derive(clap::Parser, Clone)]
+struct ServerSettings {
+    #[arg(short, long)]
+    directory: Option<String>,
+}
 
 pub(crate) struct Server {
     host: String,
@@ -24,15 +34,17 @@ impl Server {
 
     pub(crate) fn start(&self) {
         let listener = self.listner().unwrap();
+        let settings = ServerSettings::parse().clone();
 
         for stream in listener.incoming() {
+            let settings = settings.clone();
             match stream {
                 Ok(stream) => {
                     thread::spawn(move || {
                         println!("Accepted new connection");
                         let mut streamer = TcpStreamWrapper::new(&stream);
                         let request = streamer.read().unwrap();
-                        let response = handle_request(&request);
+                        let response = handle_request(&request, &settings);
                         streamer.write(response).unwrap();
                     });
                 }
@@ -49,14 +61,14 @@ impl Server {
     }
 }
 
-fn handle_request(request: &[u8]) -> String {
+fn handle_request(request: &[u8], settings: &ServerSettings) -> String {
     match http::parse(request) {
         Some(request) => match request.get_path().as_slice() {
             [] => HttpResponse::with_status(HttpStatusCode::Ok).to_string(),
             [b"echo", sub_path] => HttpResponse::with_status(HttpStatusCode::Ok)
                 .with_header(HttpHeader::ContentType.into(), "text/plain".to_string())
                 .with_header(HttpHeader::ContentLength.into(), sub_path.len().to_string())
-                .with_body(sub_path)
+                .with_body(sub_path.to_vec())
                 .to_string(),
             [b"user-agent"] => {
                 let headers = request.get_headers();
@@ -71,8 +83,32 @@ fn handle_request(request: &[u8]) -> String {
                         HttpHeader::ContentLength.into(),
                         user_agent.len().to_string(),
                     )
-                    .with_body(user_agent)
+                    .with_body(user_agent.to_vec())
                     .to_string()
+            }
+            [b"files", file_name] => {
+                let file_name = str::from_utf8(file_name).unwrap();
+                let directory = settings.directory.clone().unwrap();
+                let path = std::path::Path::new(&directory).join(file_name);
+
+                match File::open(path) {
+                    Ok(mut file) => {
+                        let mut contents = Vec::<u8>::new();
+                        let len = file.read_to_end(&mut contents).unwrap();
+                        println!("{:?}", String::from_utf8(contents.clone()));
+                        HttpResponse::with_status(HttpStatusCode::Ok)
+                            .with_header(
+                                HttpHeader::ContentType.into(),
+                                "application/octet-stream".to_string(),
+                            )
+                            .with_header(HttpHeader::ContentLength.into(), len.to_string())
+                            .with_body(contents)
+                            .to_string()
+                    }
+                    Err(_) => {
+                        HttpResponse::with_status(HttpStatusCode::NotFound).to_string()
+                    },
+                }
             }
             _ => HttpResponse::with_status(HttpStatusCode::NotFound).to_string(),
         },

@@ -103,13 +103,13 @@ impl From<HttpHeader> for &[u8] {
     }
 }
 
-pub(crate) struct HttpResponse<'a> {
+pub(crate) struct HttpResponse {
     status_code: HttpStatusCode,
     headers: HashMap<String, String>,
-    body: &'a [u8],
+    body: Vec<u8>,
 }
 
-impl<'a> Display for HttpResponse<'a> {
+impl Display for HttpResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let crlf = "\r\n";
         let version = "HTTP/1.1";
@@ -121,7 +121,10 @@ impl<'a> Display for HttpResponse<'a> {
             .map(|h| format!("{}: {}", h.0, h.1))
             .collect::<Vec<_>>()
             .join("\r\n");
-        let body = str::from_utf8(self.body).unwrap_or("");
+
+        println!("hi {}", String::from_utf8(self.body.clone()).unwrap());
+        // let body = String::from_utf8(self.body.clone()).expect("File content");
+        let body = String::from_utf8(self.body.clone()).unwrap();
         let space = " ";
         write!(
             f,
@@ -130,25 +133,25 @@ impl<'a> Display for HttpResponse<'a> {
     }
 }
 
-impl<'a> HttpResponse<'a> {
-    pub(crate) fn with_status(status_code: HttpStatusCode) -> HttpResponse<'a> {
+impl HttpResponse {
+    pub(crate) fn with_status(status_code: HttpStatusCode) -> HttpResponse {
         Self {
             status_code,
             headers: HashMap::new(),
-            body: b"",
+            body: Vec::<u8>::new(),
         }
     }
 
-    pub(crate) fn with_header(&mut self, key: String, value: String) -> HttpResponse<'a> {
+    pub(crate) fn with_header(&mut self, key: String, value: String) -> HttpResponse {
         self.headers.insert(key, value);
         Self {
             status_code: self.status_code,
             headers: self.headers.clone(),
-            body: b"",
+            body: Vec::<u8>::new(),
         }
     }
 
-    pub(crate) fn with_body(&mut self, body: &'a [u8]) -> HttpResponse<'a> {
+    pub(crate) fn with_body(&mut self, body: Vec<u8>) -> HttpResponse {
         Self {
             status_code: self.status_code,
             headers: self.headers.clone(),
