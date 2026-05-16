@@ -1,6 +1,6 @@
 use std::{
     io::{self},
-    net::TcpListener,
+    net::TcpListener, thread,
 };
 
 use crate::{
@@ -28,11 +28,13 @@ impl Server {
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
-                    println!("Accepted new connection");
-                    let mut streamer = TcpStreamWrapper::new(&stream);
-                    let request = streamer.read().unwrap();
-                    let response = handle_request(&request);
-                    streamer.write(response).unwrap();
+                    thread::spawn(move || {
+                        println!("Accepted new connection");
+                        let mut streamer = TcpStreamWrapper::new(&stream);
+                        let request = streamer.read().unwrap();
+                        let response = handle_request(&request);
+                        streamer.write(response).unwrap();
+                    });
                 }
                 Err(e) => eprintln!("error: {}", e),
             }
