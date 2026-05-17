@@ -21,6 +21,36 @@ impl FromStr for HttpVerb {
     }
 }
 
+#[derive(PartialEq, Eq)]
+pub(crate) enum Encoding {
+    Gzip,
+    Unknown(()),
+}
+
+impl TryFrom<&[u8]> for Encoding {
+    type Error = ();
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        match value {
+            b"gzip" => Ok(Encoding::Gzip),
+            _ => Err(()),
+        }
+    }
+}
+
+impl FromStr for Encoding {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let encoding = match s.to_lowercase().as_str() {
+            "gzip" => Encoding::Gzip,
+            _ => Encoding::Unknown(()),
+        };
+
+        Ok(encoding)
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct HttpRequest<'a> {
     method: HttpVerb,
@@ -62,6 +92,20 @@ impl<'a> HttpRequest<'a> {
     pub(crate) fn get_data(&self) -> &[u8] {
         &self.data
     }
+
+    pub(crate) fn get_encoding(&self) -> Option<&[u8]> {
+        let encoding = self
+            .headers
+            .get::<&[u8]>(&HttpHeader::AcceptEncoding.into())
+            .unwrap_or(&"".as_bytes())
+            .trim_ascii();
+
+        match Encoding::try_from(encoding) {
+            Ok(Encoding::Gzip) => Some(encoding),
+            Ok(Encoding::Unknown(_)) => None,
+            Err(_) => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -97,6 +141,8 @@ pub(crate) enum HttpHeader {
     ContentType,
     ContentLength,
     UserAgent,
+    AcceptEncoding,
+    ContentEncoding,
 }
 
 impl From<HttpHeader> for String {
@@ -105,6 +151,8 @@ impl From<HttpHeader> for String {
             HttpHeader::ContentType => "Content-Type".to_string(),
             HttpHeader::ContentLength => "Content-Length".to_string(),
             HttpHeader::UserAgent => "User-Agent".to_string(),
+            HttpHeader::AcceptEncoding => "Accept-Encoding".to_string(),
+            HttpHeader::ContentEncoding => "Content-Encoding".to_string(),
         }
     }
 }
@@ -115,6 +163,8 @@ impl From<HttpHeader> for &[u8] {
             HttpHeader::ContentType => "Content-Type".as_bytes(),
             HttpHeader::ContentLength => "Content-Length".as_bytes(),
             HttpHeader::UserAgent => "User-Agent".as_bytes(),
+            HttpHeader::AcceptEncoding => "Accept-Encoding".as_bytes(),
+            HttpHeader::ContentEncoding => "Content-Encoding".as_bytes(),
         }
     }
 }

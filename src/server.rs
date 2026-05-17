@@ -8,7 +8,7 @@ use std::{
 use clap::Parser;
 
 use crate::{
-    http::{self, HttpHeader, HttpResponse, HttpStatusCode},
+    http::{self, Encoding, HttpHeader, HttpResponse, HttpStatusCode},
     tcp::TcpStreamWrapper,
 };
 
@@ -97,11 +97,20 @@ fn process_post(settings: &ServerSettings, request: http::HttpRequest<'_>) -> St
 fn process_get(settings: &ServerSettings, request: http::HttpRequest<'_>) -> String {
     match request.get_path().as_slice() {
         [] => HttpResponse::with_status(HttpStatusCode::Ok).to_string(),
-        [b"echo", sub_path] => HttpResponse::with_status(HttpStatusCode::Ok)
-            .with_header(HttpHeader::ContentType.into(), "text/plain".to_string())
-            .with_header(HttpHeader::ContentLength.into(), sub_path.len().to_string())
-            .with_body(sub_path.to_vec())
-            .to_string(),
+        [b"echo", sub_path] => {
+            let mut response = HttpResponse::with_status(HttpStatusCode::Ok)
+                .with_header(HttpHeader::ContentType.into(), "text/plain".to_string())
+                .with_header(HttpHeader::ContentLength.into(), sub_path.len().to_string());
+
+            if let Some(encoding) = request.get_encoding() {
+                response.with_header(
+                    HttpHeader::ContentEncoding.into(),
+                    String::from_utf8(encoding.to_vec()).unwrap(),
+                );
+            }
+
+            response.with_body(sub_path.to_vec()).to_string()
+        }
         [b"user-agent"] => {
             let headers = request.get_headers();
             let user_agent = headers
