@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{self, Read},
+    io::{self, Read, Write},
     net::TcpListener,
     str, thread,
 };
@@ -44,6 +44,7 @@ impl Server {
                         println!("Accepted new connection");
                         let mut streamer = TcpStreamWrapper::new(&stream);
                         let request = streamer.read().unwrap();
+                        println!("request {:?}", String::from_utf8(request.clone()).unwrap());
                         let response = handle_request(&request, &settings);
                         streamer.write(response).unwrap();
                     });
@@ -63,55 +64,82 @@ impl Server {
 
 fn handle_request(request: &[u8], settings: &ServerSettings) -> String {
     match http::parse(request) {
-        Some(request) => match request.get_path().as_slice() {
-            [] => HttpResponse::with_status(HttpStatusCode::Ok).to_string(),
-            [b"echo", sub_path] => HttpResponse::with_status(HttpStatusCode::Ok)
-                .with_header(HttpHeader::ContentType.into(), "text/plain".to_string())
-                .with_header(HttpHeader::ContentLength.into(), sub_path.len().to_string())
-                .with_body(sub_path.to_vec())
-                .to_string(),
-            [b"user-agent"] => {
-                let headers = request.get_headers();
-                let user_agent = headers
-                    .get::<&[u8]>(&HttpHeader::UserAgent.into())
-                    .unwrap()
-                    .trim_ascii();
-
-                HttpResponse::with_status(HttpStatusCode::Ok)
-                    .with_header(HttpHeader::ContentType.into(), "text/plain".to_string())
-                    .with_header(
-                        HttpHeader::ContentLength.into(),
-                        user_agent.len().to_string(),
-                    )
-                    .with_body(user_agent.to_vec())
-                    .to_string()
+        Some(request) => match request.get_method() {
+            http::HttpVerb::Get => process_get(settings, request),
+            http::HttpVerb::Post => process_post(settings, request),
+            http::HttpVerb::Unknown(_) => {
+                HttpResponse::with_status(HttpStatusCode::NotFound).to_string()
             }
-            [b"files", file_name] => {
-                let file_name = str::from_utf8(file_name).unwrap();
-                let directory = settings.directory.clone().unwrap();
-                let path = std::path::Path::new(&directory).join(file_name);
-
-                match File::open(path) {
-                    Ok(mut file) => {
-                        let mut contents = Vec::<u8>::new();
-                        let len = file.read_to_end(&mut contents).unwrap();
-                        println!("{:?}", String::from_utf8(contents.clone()));
-                        HttpResponse::with_status(HttpStatusCode::Ok)
-                            .with_header(
-                                HttpHeader::ContentType.into(),
-                                "application/octet-stream".to_string(),
-                            )
-                            .with_header(HttpHeader::ContentLength.into(), len.to_string())
-                            .with_body(contents)
-                            .to_string()
-                    }
-                    Err(_) => {
-                        HttpResponse::with_status(HttpStatusCode::NotFound).to_string()
-                    },
-                }
-            }
-            _ => HttpResponse::with_status(HttpStatusCode::NotFound).to_string(),
         },
         None => "unknown path".to_string(),
+    }
+}
+
+fn process_post(settings: &ServerSettings, request: http::HttpRequest<'_>) -> String {
+    match request.get_path().as_slice() {
+        [b"files", file_name] => {
+            let file_name = str::from_utf8(file_name).unwrap();
+            let directory = settings.directory.clone().unwrap();
+            let path = std::path::Path::new(&directory).join(file_name);
+            match File::create(path) {
+                Ok(mut file) => {
+                    let buf = request.get_data();
+                    file.write_all(buf).unwrap();
+                    HttpResponse::with_status(HttpStatusCode::Created).to_string()
+                }
+                Err(_) => HttpResponse::with_status(HttpStatusCode::NotFound).to_string(),
+            }
+        }
+        _ => HttpResponse::with_status(HttpStatusCode::NotFound).to_string(),
+    }
+}
+
+fn process_get(settings: &ServerSettings, request: http::HttpRequest<'_>) -> String {
+    match request.get_path().as_slice() {
+        [] => HttpResponse::with_status(HttpStatusCode::Ok).to_string(),
+        [b"echo", sub_path] => HttpResponse::with_status(HttpStatusCode::Ok)
+            .with_header(HttpHeader::ContentType.into(), "text/plain".to_string())
+            .with_header(HttpHeader::ContentLength.into(), sub_path.len().to_string())
+            .with_body(sub_path.to_vec())
+            .to_string(),
+        [b"user-agent"] => {
+            let headers = request.get_headers();
+            let user_agent = headers
+                .get::<&[u8]>(&HttpHeader::UserAgent.into())
+                .unwrap()
+                .trim_ascii();
+
+            HttpResponse::with_status(HttpStatusCode::Ok)
+                .with_header(HttpHeader::ContentType.into(), "text/plain".to_string())
+                .with_header(
+                    HttpHeader::ContentLength.into(),
+                    user_agent.len().to_string(),
+                )
+                .with_body(user_agent.to_vec())
+                .to_string()
+        }
+        [b"files", file_name] => {
+            let file_name = str::from_utf8(file_name).unwrap();
+            let directory = settings.directory.clone().unwrap();
+            let path = std::path::Path::new(&directory).join(file_name);
+
+            match File::open(path) {
+                Ok(mut file) => {
+                    let mut contents = Vec::<u8>::new();
+                    let len = file.read_to_end(&mut contents).unwrap();
+                    println!("{:?}", String::from_utf8(contents.clone()));
+                    HttpResponse::with_status(HttpStatusCode::Ok)
+                        .with_header(
+                            HttpHeader::ContentType.into(),
+                            "application/octet-stream".to_string(),
+                        )
+                        .with_header(HttpHeader::ContentLength.into(), len.to_string())
+                        .with_body(contents)
+                        .to_string()
+                }
+                Err(_) => HttpResponse::with_status(HttpStatusCode::NotFound).to_string(),
+            }
+        }
+        _ => HttpResponse::with_status(HttpStatusCode::NotFound).to_string(),
     }
 }

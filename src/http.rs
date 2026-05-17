@@ -1,8 +1,9 @@
 use std::{collections::HashMap, fmt::Display, str::FromStr};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum HttpVerb {
     Get,
+    Post,
     Unknown(()),
 }
 
@@ -12,6 +13,7 @@ impl FromStr for HttpVerb {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let verb = match s.to_lowercase().as_str() {
             "get" => HttpVerb::Get,
+            "post" => HttpVerb::Post,
             _ => HttpVerb::Unknown(()),
         };
 
@@ -25,6 +27,7 @@ pub(crate) struct HttpRequest<'a> {
     path: Vec<&'a [u8]>,
     version: String,
     headers: HashMap<&'a [u8], &'a [u8]>,
+    data: Vec<u8>,
 }
 
 impl<'a> HttpRequest<'a> {
@@ -33,12 +36,14 @@ impl<'a> HttpRequest<'a> {
         path: Vec<&'a [u8]>,
         version: String,
         headers: HashMap<&'a [u8], &'a [u8]>,
+        data: Vec<u8>,
     ) -> Self {
         Self {
             method,
             path,
             version,
             headers,
+            data,
         }
     }
 
@@ -49,11 +54,20 @@ impl<'a> HttpRequest<'a> {
     pub(crate) fn get_headers(&self) -> HashMap<&'a [u8], &'a [u8]> {
         self.headers.clone()
     }
+
+    pub(crate) fn get_method(&self) -> HttpVerb {
+        self.method.clone()
+    }
+
+    pub(crate) fn get_data(&self) -> &[u8] {
+        &self.data
+    }
 }
 
 #[derive(Clone, Copy)]
 pub(crate) enum HttpStatusCode {
     Ok,
+    Created,
     NotFound,
 }
 
@@ -61,6 +75,7 @@ impl From<HttpStatusCode> for u16 {
     fn from(value: HttpStatusCode) -> Self {
         match value {
             HttpStatusCode::Ok => 200,
+            HttpStatusCode::Created => 201,
             HttpStatusCode::NotFound => 404,
         }
     }
@@ -70,6 +85,7 @@ impl Display for HttpStatusCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let value = match self {
             HttpStatusCode::Ok => "OK",
+            HttpStatusCode::Created => "Created",
             HttpStatusCode::NotFound => "Not Found",
         };
 
@@ -122,8 +138,6 @@ impl Display for HttpResponse {
             .collect::<Vec<_>>()
             .join("\r\n");
 
-        println!("hi {}", String::from_utf8(self.body.clone()).unwrap());
-        // let body = String::from_utf8(self.body.clone()).expect("File content");
         let body = String::from_utf8(self.body.clone()).unwrap();
         let space = " ";
         write!(
@@ -172,8 +186,24 @@ pub(crate) fn parse<'a>(request: &'a [u8]) -> Option<HttpRequest<'a>> {
         .filter(|p| !p.is_empty())
         .collect::<Vec<_>>();
     let version = str::from_utf8(request_line[2]).ok()?;
+    let headers = get_headers(request_parts.clone().collect());
+    let data = get_data(request_parts.collect());
 
-    let mut headers = HashMap::<&'a [u8], &'a [u8]>::new();
+    Some(HttpRequest::new(
+        method,
+        path,
+        version.to_string(),
+        headers,
+        data,
+    ))
+}
+
+fn get_data(request_parts: Vec<&[u8]>) -> Vec<u8> {
+    request_parts.last().unwrap().to_vec()
+}
+
+fn get_headers(request_parts: Vec<&[u8]>) -> HashMap<&[u8], &[u8]> {
+    let mut headers = HashMap::<&[u8], &[u8]>::new();
     for header_line in request_parts {
         let kv = header_line.split(|&p| p == b':').collect::<Vec<_>>();
 
@@ -186,5 +216,5 @@ pub(crate) fn parse<'a>(request: &'a [u8]) -> Option<HttpRequest<'a>> {
         headers.insert(key, value);
     }
 
-    Some(HttpRequest::new(method, path, version.to_string(), headers))
+    headers
 }
