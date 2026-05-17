@@ -109,7 +109,7 @@ fn process_get(settings: &ServerSettings, request: http::HttpRequest<'_>) -> Str
                 );
             }
 
-            response.with_body(sub_path.to_vec()).to_string()
+            response.with_body   (sub_path.to_vec()).to_string()
         }
         [b"user-agent"] => {
             let headers = request.get_headers();

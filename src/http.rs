@@ -24,7 +24,7 @@ impl FromStr for HttpVerb {
 #[derive(PartialEq, Eq)]
 pub(crate) enum Encoding {
     Gzip,
-    Unknown(()),
+    Unknown,
 }
 
 impl TryFrom<&[u8]> for Encoding {
@@ -44,7 +44,7 @@ impl FromStr for Encoding {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let encoding = match s.to_lowercase().as_str() {
             "gzip" => Encoding::Gzip,
-            _ => Encoding::Unknown(()),
+            _ => Encoding::Unknown,
         };
 
         Ok(encoding)
@@ -102,7 +102,7 @@ impl<'a> HttpRequest<'a> {
 
         match Encoding::try_from(encoding) {
             Ok(Encoding::Gzip) => Some(encoding),
-            Ok(Encoding::Unknown(_)) => None,
+            Ok(Encoding::Unknown) => None,
             Err(_) => None,
         }
     }
