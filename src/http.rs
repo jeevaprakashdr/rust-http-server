@@ -21,7 +21,7 @@ impl FromStr for HttpVerb {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Encoding {
     Gzip,
     Unknown,
@@ -34,6 +34,15 @@ impl TryFrom<&[u8]> for Encoding {
         match value {
             b"gzip" => Ok(Encoding::Gzip),
             _ => Err(()),
+        }
+    }
+}
+
+impl From<Encoding> for &[u8] {
+    fn from(value: Encoding) -> Self {
+        match value {
+            Encoding::Gzip => b"gzip",
+            Encoding::Unknown => b"",
         }
     }
 }
@@ -100,11 +109,16 @@ impl<'a> HttpRequest<'a> {
             .unwrap_or(&"".as_bytes())
             .trim_ascii();
 
-        match Encoding::try_from(encoding) {
-            Ok(Encoding::Gzip) => Some(encoding),
-            Ok(Encoding::Unknown) => None,
-            Err(_) => None,
-        }
+        let available_encoding: Vec<&[u8]> = encoding
+            .split(|&p| p == b',')
+            .collect::<Vec<_>>()
+            .iter()
+            .map(|bytes| Encoding::try_from(bytes.trim_ascii()))
+            .filter(|predicate| predicate.is_ok())
+            .map(|encode_result| encode_result.unwrap().into())
+            .collect::<Vec<_>>();
+
+        available_encoding.first().map(|f| *f)
     }
 }
 
