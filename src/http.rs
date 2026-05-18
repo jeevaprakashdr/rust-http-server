@@ -49,28 +49,6 @@ impl TryFrom<&[u8]> for Encoding {
     }
 }
 
-impl From<Encoding> for &[u8] {
-    fn from(value: Encoding) -> Self {
-        match value {
-            Encoding::Gzip => b"gzip",
-            Encoding::Unknown => b"",
-        }
-    }
-}
-
-impl FromStr for Encoding {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let encoding = match s.to_lowercase().as_str() {
-            "gzip" => Encoding::Gzip,
-            _ => Encoding::Unknown,
-        };
-
-        Ok(encoding)
-    }
-}
-
 #[derive(Debug)]
 pub(crate) struct HttpRequest<'a> {
     method: HttpVerb,
