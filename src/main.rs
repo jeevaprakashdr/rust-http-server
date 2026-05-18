@@ -6,6 +6,7 @@ use crate::server::Server;
 mod server;
 mod tcp;
 mod http;
+mod encoder;
 
 fn main() {
     println!("Logs http server will appear here!");

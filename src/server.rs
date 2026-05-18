@@ -8,6 +8,7 @@ use std::{
 use clap::Parser;
 
 use crate::{
+    encoder,
     http::{self, Encoding, HttpHeader, HttpResponse, HttpStatusCode},
     tcp::TcpStreamWrapper,
 };
@@ -62,20 +63,20 @@ impl Server {
     }
 }
 
-fn handle_request(request: &[u8], settings: &ServerSettings) -> String {
+fn handle_request(request: &[u8], settings: &ServerSettings) -> Vec<u8> {
     match http::parse(request) {
         Some(request) => match request.get_method() {
             http::HttpVerb::Get => process_get(settings, request),
             http::HttpVerb::Post => process_post(settings, request),
             http::HttpVerb::Unknown(_) => {
-                HttpResponse::with_status(HttpStatusCode::NotFound).to_string()
+                HttpResponse::with_status(HttpStatusCode::NotFound).create()
             }
         },
-        None => "unknown path".to_string(),
+        None => "unknown path".as_bytes().to_vec(),
     }
 }
 
-fn process_post(settings: &ServerSettings, request: http::HttpRequest<'_>) -> String {
+fn process_post(settings: &ServerSettings, request: http::HttpRequest<'_>) -> Vec<u8> {
     match request.get_path().as_slice() {
         [b"files", file_name] => {
             let file_name = str::from_utf8(file_name).unwrap();
@@ -85,31 +86,43 @@ fn process_post(settings: &ServerSettings, request: http::HttpRequest<'_>) -> St
                 Ok(mut file) => {
                     let buf = request.get_data();
                     file.write_all(buf).unwrap();
-                    HttpResponse::with_status(HttpStatusCode::Created).to_string()
+                    HttpResponse::with_status(HttpStatusCode::Created).create()
                 }
-                Err(_) => HttpResponse::with_status(HttpStatusCode::NotFound).to_string(),
+                Err(_) => HttpResponse::with_status(HttpStatusCode::NotFound).create(),
             }
         }
-        _ => HttpResponse::with_status(HttpStatusCode::NotFound).to_string(),
+        _ => HttpResponse::with_status(HttpStatusCode::NotFound).create(),
     }
 }
 
-fn process_get(settings: &ServerSettings, request: http::HttpRequest<'_>) -> String {
+fn process_get(settings: &ServerSettings, request: http::HttpRequest<'_>) -> Vec<u8> {
     match request.get_path().as_slice() {
-        [] => HttpResponse::with_status(HttpStatusCode::Ok).to_string(),
+        [] => HttpResponse::with_status(HttpStatusCode::Ok).create(),
         [b"echo", sub_path] => {
             let mut response = HttpResponse::with_status(HttpStatusCode::Ok)
-                .with_header(HttpHeader::ContentType.into(), "text/plain".to_string())
-                .with_header(HttpHeader::ContentLength.into(), sub_path.len().to_string());
+                .with_header(HttpHeader::ContentType.into(), "text/plain".to_string());
+
+            let default = response
+                .with_header(HttpHeader::ContentLength.into(), sub_path.len().to_string())
+                .with_body(sub_path.to_vec());
 
             if let Some(encoding) = request.get_encoding() {
-                response.with_header(
-                    HttpHeader::ContentEncoding.into(),
-                    String::from_utf8(encoding.to_vec()).unwrap(),
-                );
+                if encoding == Encoding::Gzip {
+                    let encoded = encoder::gzip(sub_path);
+                    response
+                        .with_header(HttpHeader::ContentLength.into(), encoded.len().to_string())
+                        .with_header(
+                            HttpHeader::ContentEncoding.into(),
+                            Encoding::Gzip.to_string(),
+                        )
+                        .with_body(encoded)
+                        .create()
+                } else {
+                    default.create()
+                }
+            } else {
+                default.create()
             }
-
-            response.with_body   (sub_path.to_vec()).to_string()
         }
         [b"user-agent"] => {
             let headers = request.get_headers();
@@ -125,7 +138,7 @@ fn process_get(settings: &ServerSettings, request: http::HttpRequest<'_>) -> Str
                     user_agent.len().to_string(),
                 )
                 .with_body(user_agent.to_vec())
-                .to_string()
+                .create()
         }
         [b"files", file_name] => {
             let file_name = str::from_utf8(file_name).unwrap();
@@ -144,11 +157,11 @@ fn process_get(settings: &ServerSettings, request: http::HttpRequest<'_>) -> Str
                         )
                         .with_header(HttpHeader::ContentLength.into(), len.to_string())
                         .with_body(contents)
-                        .to_string()
+                        .create()
                 }
-                Err(_) => HttpResponse::with_status(HttpStatusCode::NotFound).to_string(),
+                Err(_) => HttpResponse::with_status(HttpStatusCode::NotFound).create(),
             }
         }
-        _ => HttpResponse::with_status(HttpStatusCode::NotFound).to_string(),
+        _ => HttpResponse::with_status(HttpStatusCode::NotFound).create(),
     }
 }

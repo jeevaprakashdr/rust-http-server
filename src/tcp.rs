@@ -27,7 +27,7 @@ impl<'a> TcpStreamWrapper<'a> {
         Ok(buffer[..bytes_count].to_vec())
     }
 
-    pub(crate) fn write(&mut self, content: String) -> io::Result<()> {
-        self.1.write_all(content.as_bytes())
+    pub(crate) fn write(&mut self, content: Vec<u8>) -> io::Result<()> {
+        self.1.write_all(content.as_slice())
     }
 }

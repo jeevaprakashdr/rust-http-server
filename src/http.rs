@@ -21,10 +21,21 @@ impl FromStr for HttpVerb {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Encoding {
     Gzip,
     Unknown,
+}
+
+impl Display for Encoding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let val = match self {
+            Encoding::Gzip => "gzip",
+            Encoding::Unknown => "",
+        };
+
+        write!(f, "{val}")
+    }
 }
 
 impl TryFrom<&[u8]> for Encoding {
@@ -102,23 +113,17 @@ impl<'a> HttpRequest<'a> {
         &self.data
     }
 
-    pub(crate) fn get_encoding(&self) -> Option<&[u8]> {
+    pub(crate) fn get_encoding(&self) -> Option<Encoding> {
         let encoding = self
             .headers
             .get::<&[u8]>(&HttpHeader::AcceptEncoding.into())
             .unwrap_or(&"".as_bytes())
             .trim_ascii();
 
-        let available_encoding: Vec<&[u8]> = encoding
+        encoding
             .split(|&p| p == b',')
-            .collect::<Vec<_>>()
-            .iter()
             .map(|bytes| Encoding::try_from(bytes.trim_ascii()))
-            .filter(|predicate| predicate.is_ok())
-            .map(|encode_result| encode_result.unwrap().into())
-            .collect::<Vec<_>>();
-
-        available_encoding.first().map(|f| *f)
+            .find_map(|r| r.ok())
     }
 }
 
@@ -189,28 +194,6 @@ pub(crate) struct HttpResponse {
     body: Vec<u8>,
 }
 
-impl Display for HttpResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let crlf = "\r\n";
-        let version = "HTTP/1.1";
-        let status_code: u16 = self.status_code.into();
-        let status_code_str = self.status_code.to_string();
-        let headers = self
-            .headers
-            .iter()
-            .map(|h| format!("{}: {}", h.0, h.1))
-            .collect::<Vec<_>>()
-            .join("\r\n");
-
-        let body = String::from_utf8(self.body.clone()).unwrap();
-        let space = " ";
-        write!(
-            f,
-            "{version}{space}{status_code}{space}{status_code_str}{crlf}{headers}{crlf}{crlf}{body}"
-        )
-    }
-}
-
 impl HttpResponse {
     pub(crate) fn with_status(status_code: HttpStatusCode) -> HttpResponse {
         Self {
@@ -235,6 +218,26 @@ impl HttpResponse {
             headers: self.headers.clone(),
             body,
         }
+    }
+
+    pub(crate) fn create(&self) -> Vec<u8> {
+        let crlf = "\r\n";
+        let version = "HTTP/1.1";
+        let status_code: u16 = self.status_code.into();
+        let status_code_str = self.status_code.to_string();
+        let headers = self
+            .headers
+            .iter()
+            .map(|h| format!("{}: {}", h.0, h.1))
+            .collect::<Vec<_>>()
+            .join("\r\n");
+        let space = " ";
+
+        let response = format!(
+            "{version}{space}{status_code}{space}{status_code_str}{crlf}{headers}{crlf}{crlf}"
+        );
+
+        [response.as_bytes(), self.body.as_slice()].concat()
     }
 }
 
