@@ -50,10 +50,10 @@ impl Server {
                                 break;
                             }
 
-                            println!("request {:?}", String::from_utf8(request.clone()).unwrap());
                             if let Some(http_request) = http::parse(request.as_slice()) {
                                 let response = handle_request(http_request.clone(), &settings);
-                                streamer.write(response).unwrap();
+                                // println!("{:?}", String::from_utf8(response.clone()).unwrap());
+                                streamer.write(response[0..].to_vec()).unwrap();
 
                                 if http_request
                                     .get_headers()

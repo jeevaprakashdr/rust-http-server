@@ -4,15 +4,15 @@ use std::{
 };
 
 pub(crate) struct TcpStreamWrapper<'a> {
-    reader: BufWriter<&'a TcpStream>,
-    writer: BufReader<&'a TcpStream>,
+    reader: BufReader<&'a TcpStream>,
+    writer: BufWriter<&'a TcpStream>,
 }
 
 impl<'a> TcpStreamWrapper<'a> {
     pub(crate) fn new(stream: &'a TcpStream) -> Self {
         Self {
-            writer: BufReader::new(stream),
-            reader: BufWriter::new(stream),
+            writer: BufWriter::new(stream),
+            reader: BufReader::new(stream),
         }
     }
 
@@ -20,7 +20,7 @@ impl<'a> TcpStreamWrapper<'a> {
         let mut buffer = [0; 512];
 
         let bytes_count = self
-            .writer
+            .reader
             .read(&mut buffer[..])
             .inspect_err(|e| eprintln!("Failed to read from stream. {}", e))
             .unwrap();
@@ -34,6 +34,7 @@ impl<'a> TcpStreamWrapper<'a> {
     }
 
     pub(crate) fn write(&mut self, content: Vec<u8>) -> io::Result<()> {
-        self.reader.write_all(content.as_slice())
+        self.writer.write_all(content.as_slice())?;
+        self.writer.flush()
     }
 }
