@@ -49,9 +49,19 @@ impl Server {
                             if request.is_empty() {
                                 break;
                             }
+
                             println!("request {:?}", String::from_utf8(request.clone()).unwrap());
-                            let response = handle_request(&request, &settings);
-                            streamer.write(response).unwrap();
+                            if let Some(http_request) = http::parse(request.as_slice()) {
+                                let response = handle_request(http_request.clone(), &settings);
+                                streamer.write(response).unwrap();
+
+                                if http_request
+                                    .get_headers()
+                                    .contains_key(&String::from(HttpHeader::Connection).as_bytes())
+                                {
+                                    break;
+                                }
+                            }
                         }
                     });
                 }
@@ -68,16 +78,11 @@ impl Server {
     }
 }
 
-fn handle_request(request: &[u8], settings: &ServerSettings) -> Vec<u8> {
-    match http::parse(request) {
-        Some(request) => match request.get_method() {
-            http::HttpVerb::Get => process_get(settings, request),
-            http::HttpVerb::Post => process_post(settings, request),
-            http::HttpVerb::Unknown(_) => {
-                HttpResponse::with_status(HttpStatusCode::NotFound).create()
-            }
-        },
-        None => "unknown path".as_bytes().to_vec(),
+fn handle_request(request: http::HttpRequest<'_>, settings: &ServerSettings) -> Vec<u8> {
+    match request.get_method() {
+        http::HttpVerb::Get => process_get(settings, request),
+        http::HttpVerb::Post => process_post(settings, request),
+        http::HttpVerb::Unknown(_) => HttpResponse::with_status(HttpStatusCode::NotFound).create(),
     }
 }
 
@@ -101,8 +106,19 @@ fn process_post(settings: &ServerSettings, request: http::HttpRequest<'_>) -> Ve
 }
 
 fn process_get(settings: &ServerSettings, request: http::HttpRequest<'_>) -> Vec<u8> {
+    let connection_close = request
+        .get_headers()
+        .contains_key(&String::from(HttpHeader::Connection).as_bytes());
+    println!("connection close {}", connection_close);
+
     match request.get_path().as_slice() {
-        [] => HttpResponse::with_status(HttpStatusCode::Ok).create(),
+        [] => {
+            let mut response = HttpResponse::with_status(HttpStatusCode::Ok);
+            if connection_close {
+                response.with_header(String::from(HttpHeader::Connection), "close".to_string());
+            }
+            response.create()
+        }
         [b"echo", sub_path] => {
             let mut response = HttpResponse::with_status(HttpStatusCode::Ok)
                 .with_header(HttpHeader::ContentType.into(), "text/plain".to_string());

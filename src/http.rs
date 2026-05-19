@@ -49,7 +49,7 @@ impl TryFrom<&[u8]> for Encoding {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct HttpRequest<'a> {
     method: HttpVerb,
     path: Vec<&'a [u8]>,
@@ -140,6 +140,7 @@ pub(crate) enum HttpHeader {
     UserAgent,
     AcceptEncoding,
     ContentEncoding,
+    Connection,
 }
 
 impl From<HttpHeader> for String {
@@ -150,6 +151,7 @@ impl From<HttpHeader> for String {
             HttpHeader::UserAgent => "User-Agent".to_string(),
             HttpHeader::AcceptEncoding => "Accept-Encoding".to_string(),
             HttpHeader::ContentEncoding => "Content-Encoding".to_string(),
+            HttpHeader::Connection => "Connection".to_string(),
         }
     }
 }
@@ -162,6 +164,7 @@ impl From<HttpHeader> for &[u8] {
             HttpHeader::UserAgent => "User-Agent".as_bytes(),
             HttpHeader::AcceptEncoding => "Accept-Encoding".as_bytes(),
             HttpHeader::ContentEncoding => "Content-Encoding".as_bytes(),
+            HttpHeader::Connection => "Connection".as_bytes(),
         }
     }
 }
