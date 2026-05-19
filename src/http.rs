@@ -211,11 +211,19 @@ impl HttpResponse {
             .join("\r\n");
         let space = " ";
 
-        let response = format!(
-            "{version}{space}{status_code}{space}{status_code_str}{crlf}{headers}{crlf}{crlf}"
-        );
+        let response =
+            format!("{version}{space}{status_code}{space}{status_code_str}{crlf}{headers}");
 
-        [response.as_bytes(), self.body.as_slice()].concat()
+        if self.body.is_empty() {
+            [response.as_bytes(), format!("{crlf}{crlf}").as_bytes()].concat()
+        } else {
+            [
+                response.as_bytes(),
+                format!("{crlf}{crlf}").as_bytes(),
+                self.body.as_slice(),
+            ]
+            .concat()
+        }
     }
 }
 

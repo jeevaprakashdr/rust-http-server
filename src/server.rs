@@ -46,10 +46,12 @@ impl Server {
                         loop {
                             let mut streamer = TcpStreamWrapper::new(&stream);
                             let request = streamer.read().unwrap();
+                            if request.is_empty() {
+                                break;
+                            }
                             println!("request {:?}", String::from_utf8(request.clone()).unwrap());
                             let response = handle_request(&request, &settings);
                             streamer.write(response).unwrap();
-                            streamer.write("".as_bytes().to_vec()).unwrap();
                         }
                     });
                 }
