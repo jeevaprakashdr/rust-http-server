@@ -43,11 +43,14 @@ impl Server {
                 Ok(stream) => {
                     thread::spawn(move || {
                         println!("Accepted new connection");
-                        let mut streamer = TcpStreamWrapper::new(&stream);
-                        let request = streamer.read().unwrap();
-                        println!("request {:?}", String::from_utf8(request.clone()).unwrap());
-                        let response = handle_request(&request, &settings);
-                        streamer.write(response).unwrap();
+                        loop {
+                            let mut streamer = TcpStreamWrapper::new(&stream);
+                            let request = streamer.read().unwrap();
+                            println!("request {:?}", String::from_utf8(request.clone()).unwrap());
+                            let response = handle_request(&request, &settings);
+                            streamer.write(response).unwrap();
+                            streamer.write("".as_bytes().to_vec()).unwrap();
+                        }
                     });
                 }
                 Err(e) => eprintln!("error: {}", e),

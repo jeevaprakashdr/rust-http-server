@@ -21,7 +21,7 @@ impl FromStr for HttpVerb {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq)]
 pub(crate) enum Encoding {
     Gzip,
     Unknown,
